@@ -1,0 +1,5 @@
+# generated files at build (and also specific to user)
+*.bak
+
+# whole directories to ignore
+node_modules
