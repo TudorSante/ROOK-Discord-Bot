@@ -18,3 +18,6 @@ Installment steps:
 
 5. Run the server app:
 > nodemon start
+
+To display the event logs into a Discord channel of your choice, change
+<DISCORD_WEBHOOK_URL> in the file <discord_display.js> accordingly.
