@@ -5,29 +5,33 @@ const discordDisplay = require('./discord_display');
 let activeKeepers = new Map();
 let debugKeepers = new Map();
 
-// 
+// update current keepers data (name and addrs)
 async function updKeepersAddrsMap() {
-    await fetch(`https://api.rook.fi/api/v1/coordinator/keepers`)
-    .then(resp => resp.json())
-    .then(allKeepersData => {
-        // extract the active kepers
-        for (const keeper of allKeepersData) {
-            if (keeper.status === "active") {
-                activeKeepers.set(keeper["name"], keeper["activeTakerAddresses"].map(element => {
-                    return element.toLowerCase();
-                }));
+    try {
+        await fetch(`https://api.rook.fi/api/v1/coordinator/keepers`)
+        .then(resp => resp.json())
+        .then(allKeepersData => {
+            // extract the active kepers
+            for (const keeper of allKeepersData) {
+                if (keeper.status === "active") {
+                    activeKeepers.set(keeper["name"], keeper["activeTakerAddresses"].map(element => {
+                        return element.toLowerCase();
+                    }));
+                }
+                else {
+                    // debug (inactive) keepers
+                    debugKeepers.set(keeper["name"], keeper["activeTakerAddresses"].map(element => {
+                        return element.toLowerCase();
+                    }));
+                }
             }
-            else {
-                // debug (inactive) keepers
-                debugKeepers.set(keeper["name"], keeper["activeTakerAddresses"].map(element => {
-                    return element.toLowerCase();
-                }));
-            }
-        }
-    })
+        })
+    } catch (error) {
+        console.log(error);
+    }
 }
 
-// keep track of subscribing/unsubscribing keepers
+// display in Discord the keepers name and associated addrs
 async function displayKeepersAddrsMap() {
     // current keepers addrs for the POST message   
     let fields = [];
@@ -53,6 +57,7 @@ async function displayKeepersAddrsMap() {
     await discordDisplay.postMessDiscord(fields);
 }
 
+// periodic call to upd keepers data
 async function periodicKeepersAddrsUpd() {
     // update the keepers addrs
     await updKeepersAddrsMap();

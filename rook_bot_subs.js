@@ -1,26 +1,26 @@
+// connect to eth ntw through an Infura node
 const Web3 = require('web3');
 let web3Provider = new Web3.providers.WebsocketProvider("wss://mainnet.infura.io/ws/v3/ebad15b2e19d425ea600d0ce8a4b058c");
 var web3 = new Web3(web3Provider);
-const PROXY_0X_CONTRACT_ADDR = '0xdef1c0ded9bec7f1a1670819833240f027b25eff';
 
+// support modules 
 const tokenMetadataFunc = require("./token_metadata");
 const keepersDataFunc = require("./keepers_data");
 const discordDisplay = require('./discord_display');
 
-
+// contract and event addrs
+const PROXY_0X_CONTRACT_ADDR = '0xdef1c0ded9bec7f1a1670819833240f027b25eff';
 const TX_ORIGIN_COORD_ADDR = '0xbd49a97300e10325c78d6b4ec864af31623bb5dd';
 const RFQ_ORDER_ORIGINS_ALLOWED_EV = '0x02dfead5eb769b298e82dd9650b31c40559a3d42701dbf53c931bc2682847c31';
 const RFQ_ORDER_FILLED_EV = '0x829fa99d94dc4636925b38632e625736a614c154d55006b7ab6bea979c210c32';
 
+// options for the getPastLogs (new keepers/order filled)
 let optionsArdd = {
-    // fromBlock: 14257087,                  //Number || "earliest" || "pending" || "latest"
-    // toBlock: 14657087,
-    fromBlock: 14921992,
+    fromBlock: 14921992,                    //Number || "earliest" || "pending" || "latest"
     toBlock: 14921992,
     address: PROXY_0X_CONTRACT_ADDR,
     topics: [RFQ_ORDER_ORIGINS_ALLOWED_EV]   // new Keeper Taker addr registered
 };
-
 let optionsOrders = {
         fromBlock: 15049600,                  //Number || "earliest" || "pending" || "latest"
         toBlock: "latest",
@@ -28,6 +28,7 @@ let optionsOrders = {
         topics: [RFQ_ORDER_FILLED_EV]      // Rfq order filled
 };
 
+// method to service RFQ_ORDER_ORIGINS_ALLOWED_EV events
 async function updKeepersAddrsCallback(error, results) {
     if (!error) {
         if (!results.length)
@@ -68,8 +69,6 @@ async function updKeepersAddrsCallback(error, results) {
                         fieldValue = `> ${newKeeperAddrs}\n`
                     }
                     else if (newKeeperAddrs.length > 1) {
-                        // console.log(`New Keeper Takers: ${newKeeperAddrs} - Welcome!`);
-                        // content += `New Keeper Takers: ${newKeeperAddrs} - Welcome!\n\n`;
                         fieldName = `Welcome new Keepers:\n\n`;
                         for (let j = 0; j < newKeeperAddrs.length; j++)
                             fieldValue += `> ${newKeeperAddrs[j]}\n`;
@@ -83,13 +82,10 @@ async function updKeepersAddrsCallback(error, results) {
                         exKeeperAddrs = keeperTakerAddr.filter(x => !dataRes[1].includes(x));
 
                     if (exKeeperAddrs.length === 1) {
-                        // console.log(`Keeper Taker: ${exKeeperAddrs} - Just unsubscribed!`)
                         fieldName = `Following Keeper just unsubscribed:\n`;
                         fieldValue = `> ${exKeeperAddrs}\n`
-                        // content += `Keeper Taker:\n${exKeeperAddrs}\n - Just unsubscribed!\n\n`;
                     }
                     else if (exKeeperAddrs.length > 1) {
-                        // console.log(`Keeper Takers: ${exKeeperAddrs} - Just unsubscribed!`);
                         fieldName = `Following Keepers just unsubscribed:\n`;
                         for (let j = 0; j < exKeeperAddrs.length; j++)
                             fieldValue += `> ${exKeeperAddrs[j]}\n`;
@@ -120,16 +116,15 @@ async function getKeeperAddrs() {
     return prom;
 }
 
+// method to subscribe to RFQ_ORDER_ORIGINS_ALLOWED_EV events
 function getKeeperAddrsSubs() {
     web3.eth.subscribe('logs', {
-        // fromBlock: 14657087,
-        // toBlock: "latest",
         address: PROXY_0X_CONTRACT_ADDR,
         topics: [RFQ_ORDER_ORIGINS_ALLOWED_EV]
     })
     .on("data", async (results) => {
         // log res for debugging purposes
-        console.log(results);  
+        // console.log(results);  
         // display the new/old keeper address(es)
         await updKeepersAddrsCallback(null, results); // set error param to null to use the callback function
         // update the keepers map on subs event
@@ -139,6 +134,7 @@ function getKeeperAddrsSubs() {
     });
 }
 
+// method to service RFQ_ORDER_FILLED_EV events
 async function trackOrderFilledCallback(error, results) {  
     if (!error) {        
         let fields = [];
@@ -175,6 +171,7 @@ async function trackOrderFilledCallback(error, results) {
     }
 }
 
+// old (deprecated) method to get past orders filled by Keeper. Used mainly for testing purposes.
 async function filterOrderFilledLogs() {
     let prom;   // will wait for the promise to finish
     await web3.eth.getPastLogs(optionsOrders, (error, results) => {
@@ -183,44 +180,49 @@ async function filterOrderFilledLogs() {
     return prom;
 }
 
+// method to subscribe to RFQ_ORDER_FILLED_EV events
 function filterOrderFilledLogsSubs() {
     web3.eth.subscribe('logs', {
-        // fromBlock: 14926452,                  //Number || "earliest" || "pending" || "latest"
-        // toBlock: "latest",
         address: PROXY_0X_CONTRACT_ADDR,
         topics: [RFQ_ORDER_FILLED_EV]
     })
     .on("data", (results) => {
         // log res for debugging purposes
-        console.log(results);                       
+        // console.log(results);                       
         trackOrderFilledCallback(null, results);    // set error param to null to use the callback function
     });
 }
 
+// main method to subscribe to the req events and periodically upd token and keepers data
 async function trackFilledOrdersByKeepers() {
-    // make sure we are synced to the eth ntw events
+    // make sure we are synced to the eth ntw
     web3.eth.isSyncing()
         .then(async (result) => {
             if (!result)    // false once the sync is done, see doc
+            {
                 console.log('Successfully synced!');
 
-            // keepersDataFunc.updKeepersAddrsMap();
+                // keepersDataFunc.updKeepersAddrsMap();
 
-            // periodically update the keepers addrs. this periodic call should be redundant (safety measure), since 
-            // the keeper addrs should be updated automatically in case of RFQ_ORDER_ORIGINS_ALLOWED_EV events
-            // through the subscription callback mechanism
-            await keepersDataFunc.periodicKeepersAddrsUpd();
-            // if server just started, display in Discord all active Keepers
-            keepersDataFunc.displayKeepersAddrsMap();
-            // periodically update the token data
-            await tokenMetadataFunc.periodicTokenDataUpd();
-            // await getKeeperAddrs();
+                // periodically update the keepers addrs. this periodic call should be redundant (safety measure), since 
+                // the keeper addrs should be updated automatically in case of RFQ_ORDER_ORIGINS_ALLOWED_EV events
+                // through the subscription callback mechanism
+                await keepersDataFunc.periodicKeepersAddrsUpd();
+                // if server just started, display in Discord all active Keepers
+                keepersDataFunc.displayKeepersAddrsMap();
+                // periodically update the token data
+                await tokenMetadataFunc.periodicTokenDataUpd();
+                // await getKeeperAddrs();
 
-            // filterOrderFilledLogs();
+                // filterOrderFilledLogs();
 
-            // perform event subscriptions
-            getKeeperAddrsSubs();               // log to Discord new Keeper Addresses
-            filterOrderFilledLogsSubs();        // log to Discord Keepers' Transactions
+                // perform event subscriptions
+                getKeeperAddrsSubs();               // log to Discord new Keeper Addresses
+                filterOrderFilledLogsSubs();        // log to Discord Keepers' Transactions
+            }
+            else {
+                console.log("Error at syncing! Restart server...");
+            }
         })
 }
 
