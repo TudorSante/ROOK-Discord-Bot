@@ -29,5 +29,4 @@ npm install nodemon
 nodemon start
 ```
 
-### Note: To display the event logs into a Discord channel of your choice, replace
-<DISCORD_WEBHOOK_URL> in the file <discord_display.js> with an url of your own.
+### Note: To display the event logs into a Discord channel of your choice, replace <DISCORD_WEBHOOK_URL> in the file <discord_display.js> with your own url.
