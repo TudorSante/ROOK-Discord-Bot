@@ -1,12 +1,19 @@
 fetch = require('node-fetch');
-const discordDisplay = require('./discord_display');
+const discordModule = require('./discord_display');
 
-// active/inactive Keeper names and addrs
 let activeKeepers = new Map();
 let debugKeepers = new Map();
 
-// update current keepers data (name and addrs)
-async function updKeepersAddrsMap() {
+
+function getActiveKeepers() {
+    return activeKeepers;
+}
+
+function getDebugKeepers() {
+    return debugKeepers;
+}
+
+async function updateKeepersAddressMap() {
     try {
         await fetch(`https://api.rook.fi/api/v1/coordinator/keepers`)
         .then(resp => resp.json())
@@ -14,13 +21,13 @@ async function updKeepersAddrsMap() {
             // extract the active kepers
             for (const keeper of allKeepersData) {
                 if (keeper.status === "active") {
-                    activeKeepers.set(keeper["name"], keeper["activeTakerAddresses"].map(element => {
+                    activeKeepers.set(keeper.name, keeper.activeTakerAddresses.map(element => {
                         return element.toLowerCase();
                     }));
                 }
                 else {
                     // debug (inactive) keepers
-                    debugKeepers.set(keeper["name"], keeper["activeTakerAddresses"].map(element => {
+                    debugKeepers.set(keeper.name, keeper.activeTakerAddresses.map(element => {
                         return element.toLowerCase();
                     }));
                 }
@@ -31,9 +38,7 @@ async function updKeepersAddrsMap() {
     }
 }
 
-// display in Discord the keepers name and associated addrs
-async function displayKeepersAddrsMap() {
-    // current keepers addrs for the POST message   
+async function displayKeepersAddressMap() { 
     let fields = [];
     var firstIter = true;
     for (const [keeper, allKeeperAddrs] of activeKeepers) {
@@ -45,25 +50,42 @@ async function displayKeepersAddrsMap() {
         fieldName += `**${keeper}**:\n`;
 
         let fieldValue = '';
+        let addressCounter = 0;
+        let maxAddressesAllowedInPostRequest = 20;
         for (const keeperAddr of allKeeperAddrs) {
+            addressCounter++;
+
             fieldValue += `> ${keeperAddr}\n`;
+
+            if (!(addressCounter % maxAddressesAllowedInPostRequest) && addressCounter) {
+                fields = fields.concat([{
+                    "name": fieldName.concat(`-> Total keepers: ${allKeeperAddrs.length}`,
+                        `, batch: ${addressCounter-maxAddressesAllowedInPostRequest + 1}-${addressCounter}`), 
+                    "value": fieldValue
+                }]);
+                fieldValue = '';
+            }
         }
-
-        fields = fields.concat([{"name": fieldName, "value": fieldValue}]);
+        if (fieldName.length > 0 && fieldValue.length > 0) {
+            fields = fields.concat([{
+                "name": fieldName.concat(`-> Total keepers: ${allKeeperAddrs.length}`,
+                    `, batch: ${addressCounter - addressCounter % maxAddressesAllowedInPostRequest + 1}-${addressCounter}`), 
+                "value": fieldValue
+            }]);
+            // fields = fields.concat([{"name": fieldName, "value": fieldValue}]);
+        }
+        
     }
+    // console.log(fields);
 
-
-    // if message not empty, sent POST req with keepers addrs to the discord channel
-    await discordDisplay.postMessDiscord(fields);
+    await discordModule.postDiscordMessage(fields);
 }
 
-// periodic call to upd keepers data
-async function periodicKeepersAddrsUpd() {
-    // update the keepers addrs
-    await updKeepersAddrsMap();
+// update the keepers addrs each hour
+async function periodicKeepersAddressUpdate() {
+    await updateKeepersAddressMap();
 
-    // update the keepers addrs each hour
-    setTimeout(periodicKeepersAddrsUpd, 600000);
+    setTimeout(periodicKeepersAddressUpdate, 600000);
 }
 
-module.exports = { activeKeepers, debugKeepers, updKeepersAddrsMap, displayKeepersAddrsMap, periodicKeepersAddrsUpd };
+module.exports = { getActiveKeepers, getDebugKeepers, updateKeepersAddressMap, displayKeepersAddressMap, periodicKeepersAddressUpdate };

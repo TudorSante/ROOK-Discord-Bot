@@ -23,7 +23,7 @@ let optionsArdd = {
 };
 let optionsOrders = {
         fromBlock: 15049600,                  //Number || "earliest" || "pending" || "latest"
-        toBlock: "latest",
+        toBlock: 15049800,
         address: PROXY_0X_CONTRACT_ADDR,
         topics: [RFQ_ORDER_FILLED_EV]      // Rfq order filled
 };
@@ -52,9 +52,9 @@ async function updKeepersAddrsCallback(error, results) {
                 });
 
                 // get all active keepers addrs
-                keeperTakerAddr = [].concat(...Array.from(keepersDataFunc.activeKeepers.values()));
+                keeperTakerAddr = [].concat(...Array.from(keepersDataFunc.getActiveKeepers().values()));
                 // get rid of debugging keeper addrs
-                let debugKeeperAddrs = [].concat(...Array.from(keepersDataFunc.debugKeepers.values()))
+                let debugKeeperAddrs = [].concat(...Array.from(keepersDataFunc.getDebugKeepers().values()))
                 dataRes[1] = dataRes[1].filter(x => !debugKeeperAddrs.includes(x));
 
                 if (dataRes[2]) {
@@ -97,7 +97,7 @@ async function updKeepersAddrsCallback(error, results) {
                 }
 
                 // if message not empty, sent POST req with keepers addrs to the discord channel
-                await discordDisplay.postMessDiscord(fields);
+                await discordDisplay.postDiscordMessage(fields);
             }
         }
     }
@@ -109,9 +109,9 @@ async function getKeeperAddrs() {
     await web3.eth.getPastLogs(optionsArdd, async (error, results) => {
         prom = await updKeepersAddrsCallback(error, results);
         // update the keepers map on subs event
-        await keepersDataFunc.updKeepersAddrsMap();
+        await keepersDataFunc.updateKeepersAddressMap();
         // print the newly upd addrs map
-        keepersDataFunc.displayKeepersAddrsMap();
+        keepersDataFunc.displayKeepersAddressMap();
     });
     return prom;
 }
@@ -128,9 +128,9 @@ function getKeeperAddrsSubs() {
         // display the new/old keeper address(es)
         await updKeepersAddrsCallback(null, results); // set error param to null to use the callback function
         // update the keepers map on subs event
-        await keepersDataFunc.updKeepersAddrsMap();
+        await keepersDataFunc.updateKeepersAddressMap();
         // print the newly upd addrs map
-        keepersDataFunc.displayKeepersAddrsMap();
+        keepersDataFunc.displayKeepersAddressMap();
     });
 }
 
@@ -145,29 +145,32 @@ async function trackOrderFilledCallback(error, results) {
             const dataRes = web3.eth.abi.decodeParameters(['bytes32', 'address', 'address', 
                 'address', 'address', 'uint128', 'uint128', 'bytes32'], results[i].data);
             // check if the taker address is enlisted into the Keeper Takers ones
-            keeperTakerAddr = [].concat(...Array.from(keepersDataFunc.activeKeepers.values()));
+            keeperTakerAddr = [].concat(...Array.from(keepersDataFunc.getActiveKeepers().values()));
             if (keeperTakerAddr.includes(dataRes[2].toLowerCase())) {
                 // block nr
                 console.log(`Block nr: ${results[i].blockNumber}`);
                 // get token market info
-                makerTokenData = tokenMetadataFunc.getTokenDataByAddr(dataRes[3].toLowerCase());
-                takerTokenData = tokenMetadataFunc.getTokenDataByAddr(dataRes[4].toLowerCase());
-                // compute amounts exchanged
-                let makerAmount = +(Math.round(dataRes[6]/(10**makerTokenData["decimals"]) + "e+2")  + "e-2");
-                let takerAmount = +(Math.round(dataRes[5]/(10**takerTokenData["decimals"]) + "e+2")  + "e-2");
-                // get Tx keeper name
-                let keeperName = [...keepersDataFunc.activeKeepers].find(([key, value]) => value.includes(dataRes[2].toLowerCase()))[0]
-                // format the webhook message content
-                fieldName = `New OrderFill:\n\n`;
-                fieldValue = `${makerAmount} ${makerTokenData["name"]} to ${takerAmount} ${takerTokenData["name"]} (~$${Math.round(takerAmount*takerTokenData["latest_price"]["usd_price"])})\n\n`;
-                fieldValue += `Filled by Keeper ${keeperName}\n\n`;
-                fieldValue += `Tx link:\nhttps://etherscan.io/tx/${results[i]["transactionHash"]}\n\n`;
+                makerTokenData = tokenMetadataFunc.getTokenDataByAddress(dataRes[3].toLowerCase());
+                takerTokenData = tokenMetadataFunc.getTokenDataByAddress(dataRes[4].toLowerCase());
 
-                fields = fields.concat([{"name": fieldName, "value": fieldValue}]);
+                if (makerTokenData && takerTokenData) {
+                    // compute amounts exchanged
+                    let makerAmount = +(Math.round(dataRes[6]/(10**makerTokenData["decimals"]) + "e+2")  + "e-2");
+                    let takerAmount = +(Math.round(dataRes[5]/(10**takerTokenData["decimals"]) + "e+2")  + "e-2");
+                    // get Tx keeper name
+                    let keeperName = [...keepersDataFunc.getActiveKeepers()].find(([key, value]) => value.includes(dataRes[2].toLowerCase()))[0]
+                    // format the webhook message content
+                    fieldName = `New OrderFill:\n\n`;
+                    fieldValue = `${makerAmount} ${makerTokenData["name"]} to ${takerAmount} ${takerTokenData["name"]} (~$${Math.round(takerAmount*takerTokenData["latest_price"]["usd_price"])})\n\n`;
+                    fieldValue += `Filled by Keeper ${keeperName}\n\n`;
+                    fieldValue += `Tx link:\nhttps://etherscan.io/tx/${results[i]["transactionHash"]}\n\n`;
+
+                    fields = fields.concat([{"name": fieldName, "value": fieldValue}]);
+                }
             }
         }
 
-        await discordDisplay.postMessDiscord(fields);
+        await discordDisplay.postDiscordMessage(fields);
     }
 }
 
@@ -202,23 +205,23 @@ async function trackFilledOrdersByKeepers() {
             {
                 console.log('Successfully synced!');
 
-                // keepersDataFunc.updKeepersAddrsMap();
+                // keepersDataFunc.updateKeepersAddressMap();
 
                 // periodically update the keepers addrs. this periodic call should be redundant (safety measure), since 
                 // the keeper addrs should be updated automatically in case of RFQ_ORDER_ORIGINS_ALLOWED_EV events
                 // through the subscription callback mechanism
-                await keepersDataFunc.periodicKeepersAddrsUpd();
+                await keepersDataFunc.periodicKeepersAddressUpdate();
                 // if server just started, display in Discord all active Keepers
-                keepersDataFunc.displayKeepersAddrsMap();
+                keepersDataFunc.displayKeepersAddressMap();
                 // periodically update the token data
-                await tokenMetadataFunc.periodicTokenDataUpd();
+                await tokenMetadataFunc.periodicTokenDataUpdate();
                 // await getKeeperAddrs();
 
-                // filterOrderFilledLogs();
+                filterOrderFilledLogs();
 
                 // perform event subscriptions
-                getKeeperAddrsSubs();               // log to Discord new Keeper Addresses
-                filterOrderFilledLogsSubs();        // log to Discord Keepers' Transactions
+                // getKeeperAddrsSubs();               // log to Discord new Keeper Addresses
+                // filterOrderFilledLogsSubs();        // log to Discord Keepers' Transactions
             }
             else {
                 console.log("Error at syncing! Restart server...");
