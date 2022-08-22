@@ -32,6 +32,7 @@ async function updateKeepersAddressMap() {
                 }
             }
         })
+        .catch(err => console.error(err));
 }
 
 function displayKeepersAddressMap() { 
@@ -80,7 +81,7 @@ function displayKeepersAddressMap() {
 // update the keepers addrs each hour
 function periodicKeepersAddressUpdate() {
     updateKeepersAddressMap();
-
+    
     setTimeout(periodicKeepersAddressUpdate, 600000);
 }
 

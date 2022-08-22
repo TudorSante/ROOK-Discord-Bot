@@ -104,15 +104,16 @@ async function originsAllowedEventCallback(error, results) {
 }
 
 // old (deprecated) method to get Keeper Taker Addresses. Used mainly for testing purposes and doc of web3 calls.
-async function getKeeperAddrs() {
-    web3.eth.getPastLogs(originsAllowedOptions, async (error, results) => {
+function getKeeperAddrs() {
+    web3.eth.getPastLogs(originsAllowedOptions, (error, results) => {
         // console.log(results)
-        await originsAllowedEventCallback(error, results);
+        originsAllowedEventCallback(error, results);
         // update the keepers map on subs event
-        await keepersDataModule.updateKeepersAddressMap();
+        keepersDataModule.updateKeepersAddressMap()
+            .then(() => keepersDataModule.displayKeepersAddressMap());
         // print the newly upd addrs map
-        keepersDataModule.displayKeepersAddressMap();
-    });
+        // keepersDataModule.displayKeepersAddressMap();
+    }).catch(error => console.log(error.message));
 }
 
 // method to subscribe to RFQ_ORDER_ORIGINS_ALLOWED_EV events
@@ -121,16 +122,16 @@ function originsAllowedEventSubscription() {
         address: PROXY_0X_CONTRACT_ADDR,
         topics: [RFQ_ORDER_ORIGINS_ALLOWED_EV]
     })
-    .on("data", async (results) => {
-        // log res for debugging purposes
+    .on("data", results => {
         // console.log(results);  
         // display the new/old keeper address(es)
-        await originsAllowedEventCallback(null, results); // set error param to null to use the callback function
+        originsAllowedEventCallback(null, results); // set error param to null to use the callback function
         // update the keepers map on subs event
-        await keepersDataModule.updateKeepersAddressMap();
+        keepersDataModule.updateKeepersAddressMap()
+            .then(() => keepersDataModule.displayKeepersAddressMap());
         // print the newly upd addrs map
-        keepersDataModule.displayKeepersAddressMap();
-    });
+        // keepersDataModule.displayKeepersAddressMap();
+    })
 }
 
 // method to service RFQ_ORDER_FILLED_EV events
@@ -174,10 +175,10 @@ async function orderFilledEventCallback(error, results) {
 }
 
 // old (deprecated) method to get past orders filled by Keeper. Used mainly for testing purposes and doc of web3 calls.
-function filterOrderFilledLogs() {
+function displayOrderFilledLogs() {
     web3.eth.getPastLogs(orderFilledOptions, (error, results) => {
         orderFilledEventCallback(error, results);
-    });
+    }).catch(error => console.log(error.message));
 }
 
 // method to subscribe to RFQ_ORDER_FILLED_EV events
@@ -190,24 +191,29 @@ function orderFilledEventSubscription() {
         // log res for debugging purposes
         // console.log(results);                       
         orderFilledEventCallback(null, results);    // set error param to null to use the callback function
-    });
+    })
 }
 
 // main method to subscribe to the req events and periodically upd token and keepers data
-async function trackOriginsAndOrderFilledEvents() {
+function trackOriginsAndOrderFilledEvents() {
     // make sure we are synced to the eth ntw
     web3.eth.isSyncing()
-        .then(async (result) => {
+        .then(result => {
             if (!result)    // false once the sync is done, see doc
             {
                 console.log('Successfully synced!');
 
                 // if server just started, display in Discord all active Keepers
-                await keepersDataModule.updateKeepersAddressMap();
-                keepersDataModule.displayKeepersAddressMap();
-                // ... and some orderFilled past logs
-                await tokenDataModule.updateTokenData();
-                filterOrderFilledLogs();
+                Promise.all([
+                    keepersDataModule.updateKeepersAddressMap(),
+                    tokenDataModule.updateTokenData()
+                ])
+                    .then(() => {
+                        keepersDataModule.displayKeepersAddressMap();
+                        // display also some past logs as PoC
+                        displayOrderFilledLogs();
+                    })
+                    .catch(error => console.log(error.message));
 
                 tokenDataModule.periodicTokenDataUpdate();
                 // redundant periodic call (safety measure), keeper addrs are updated automatically in case of events

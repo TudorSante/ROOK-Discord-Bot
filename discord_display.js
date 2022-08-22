@@ -5,18 +5,13 @@ const DISCORD_WEBHOOK_URL = 'https://discord.com/api/webhooks/980194686557884508
 
 async function postDiscordMessage(fields) {
     if (fields.length) {
-        // console.log(content);
-        try {
-            await axios.post(DISCORD_WEBHOOK_URL, {
-                // content: content,
-                embeds: [{
-                    fields: 
-                        fields
-                }],
-            })
-        } catch (error) {
-            console.log(error);
-        }
+        axios.post(DISCORD_WEBHOOK_URL, {
+            // content: content,
+            embeds: [{
+                fields: 
+                    fields
+            }],
+        }).catch(error => console.log(error.message));
     }
 }
 

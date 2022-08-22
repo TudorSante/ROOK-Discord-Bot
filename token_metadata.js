@@ -18,6 +18,7 @@ async function updateTokenData() {
                 }]);
             }
         })
+        .catch(err => console.error(err));
 }
 
 function getTokenDataByAddress(tokenContractAddr) {
