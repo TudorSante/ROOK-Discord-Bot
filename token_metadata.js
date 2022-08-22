@@ -3,8 +3,7 @@ fetch = require('node-fetch');
 let tokenData = [];
 
 async function updateTokenData() {
-    try {
-        await fetch(`https://api.rook.fi/api/v1/trade/tokens`) // endpoint to get the data of every token supported by the hidingbook
+    return fetch(`https://api.rook.fi/api/v1/trade/tokens`) // endpoint to get the data of every token supported by the hidingbook
         .then(resp => resp.json())
         .then(fetchedTokenData => {
             tokenData = [];
@@ -19,9 +18,6 @@ async function updateTokenData() {
                 }]);
             }
         })
-    } catch (error) {
-        console.log(error);
-    }
 }
 
 function getTokenDataByAddress(tokenContractAddr) {
@@ -35,8 +31,8 @@ function getTokenDataByAddress(tokenContractAddr) {
 }
 
 // update the token data each minute
-async function periodicTokenDataUpdate() {
-    await updateTokenData();
+function periodicTokenDataUpdate() {
+    updateTokenData();
 
     setTimeout(periodicTokenDataUpdate, 60000);
 }

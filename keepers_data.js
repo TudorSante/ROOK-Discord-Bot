@@ -14,8 +14,7 @@ function getDebugKeepers() {
 }
 
 async function updateKeepersAddressMap() {
-    try {
-        await fetch(`https://api.rook.fi/api/v1/coordinator/keepers`)
+    return fetch(`https://api.rook.fi/api/v1/coordinator/keepers`)
         .then(resp => resp.json())
         .then(allKeepersData => {
             // extract the active kepers
@@ -33,12 +32,9 @@ async function updateKeepersAddressMap() {
                 }
             }
         })
-    } catch (error) {
-        console.log(error);
-    }
 }
 
-async function displayKeepersAddressMap() { 
+function displayKeepersAddressMap() { 
     let fields = [];
     var firstIter = true;
     for (const [keeper, allKeeperAddrs] of activeKeepers) {
@@ -59,7 +55,7 @@ async function displayKeepersAddressMap() {
 
             if (!(addressCounter % maxAddressesAllowedInPostRequest) && addressCounter) {
                 fields = fields.concat([{
-                    "name": fieldName.concat(`-> Total keepers: ${allKeeperAddrs.length}`,
+                    "name": fieldName.concat(`- Total keepers: ${allKeeperAddrs.length}`,
                         `, batch: ${addressCounter-maxAddressesAllowedInPostRequest + 1}-${addressCounter}`), 
                     "value": fieldValue
                 }]);
@@ -68,7 +64,7 @@ async function displayKeepersAddressMap() {
         }
         if (fieldName.length > 0 && fieldValue.length > 0) {
             fields = fields.concat([{
-                "name": fieldName.concat(`-> Total keepers: ${allKeeperAddrs.length}`,
+                "name": fieldName.concat(`- Total keepers: ${allKeeperAddrs.length}`,
                     `, batch: ${addressCounter - addressCounter % maxAddressesAllowedInPostRequest + 1}-${addressCounter}`), 
                 "value": fieldValue
             }]);
@@ -78,12 +74,12 @@ async function displayKeepersAddressMap() {
     }
     // console.log(fields);
 
-    await discordModule.postDiscordMessage(fields);
+    discordModule.postDiscordMessage(fields);
 }
 
 // update the keepers addrs each hour
-async function periodicKeepersAddressUpdate() {
-    await updateKeepersAddressMap();
+function periodicKeepersAddressUpdate() {
+    updateKeepersAddressMap();
 
     setTimeout(periodicKeepersAddressUpdate, 600000);
 }

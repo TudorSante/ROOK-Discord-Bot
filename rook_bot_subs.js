@@ -4,9 +4,9 @@ let web3Provider = new Web3.providers.WebsocketProvider("wss://mainnet.infura.io
 var web3 = new Web3(web3Provider);
 
 // support modules 
-const tokenMetadataFunc = require("./token_metadata");
-const keepersDataFunc = require("./keepers_data");
-const discordDisplay = require('./discord_display');
+const tokenDataModule = require("./token_metadata");
+const keepersDataModule = require("./keepers_data");
+const discordModule = require('./discord_display');
 
 // contract and event addrs
 const PROXY_0X_CONTRACT_ADDR = '0xdef1c0ded9bec7f1a1670819833240f027b25eff';
@@ -15,13 +15,13 @@ const RFQ_ORDER_ORIGINS_ALLOWED_EV = '0x02dfead5eb769b298e82dd9650b31c40559a3d42
 const RFQ_ORDER_FILLED_EV = '0x829fa99d94dc4636925b38632e625736a614c154d55006b7ab6bea979c210c32';
 
 // options for the getPastLogs (new keepers/order filled)
-let optionsArdd = {
+let originsAllowedOptions = {
     fromBlock: 14921992,                    //Number || "earliest" || "pending" || "latest"
     toBlock: 14921992,
     address: PROXY_0X_CONTRACT_ADDR,
     topics: [RFQ_ORDER_ORIGINS_ALLOWED_EV]   // new Keeper Taker addr registered
 };
-let optionsOrders = {
+let orderFilledOptions = {
         fromBlock: 15049600,                  //Number || "earliest" || "pending" || "latest"
         toBlock: 15049800,
         address: PROXY_0X_CONTRACT_ADDR,
@@ -29,10 +29,10 @@ let optionsOrders = {
 };
 
 // method to service RFQ_ORDER_ORIGINS_ALLOWED_EV events
-async function updKeepersAddrsCallback(error, results) {
+async function originsEventCallback(error, results) {
     if (!error) {
-        if (!results.length)
-            results = [results] // if not an array of res was returned, rather only an element
+        if (!Array.isArray(results))
+            results = [results]; // if not an array of res was returned, rather only an element
         for (let i = 0; i < results.length; i++) {
             // block nr
             console.log(`Block nr: ${results[i].blockNumber}`);
@@ -52,9 +52,9 @@ async function updKeepersAddrsCallback(error, results) {
                 });
 
                 // get all active keepers addrs
-                keeperTakerAddr = [].concat(...Array.from(keepersDataFunc.getActiveKeepers().values()));
+                keeperTakerAddr = [].concat(...Array.from(keepersDataModule.getActiveKeepers().values()));
                 // get rid of debugging keeper addrs
-                let debugKeeperAddrs = [].concat(...Array.from(keepersDataFunc.getDebugKeepers().values()))
+                let debugKeeperAddrs = [].concat(...Array.from(keepersDataModule.getDebugKeepers().values()))
                 dataRes[1] = dataRes[1].filter(x => !debugKeeperAddrs.includes(x));
 
                 if (dataRes[2]) {
@@ -97,27 +97,26 @@ async function updKeepersAddrsCallback(error, results) {
                 }
 
                 // if message not empty, sent POST req with keepers addrs to the discord channel
-                await discordDisplay.postDiscordMessage(fields);
+                await discordModule.postDiscordMessage(fields);
             }
         }
     }
 }
 
-// old (deprecated) method to get Keeper Taker Addresses. Used mainly for testing purposes.
+// old (deprecated) method to get Keeper Taker Addresses. Used mainly for testing purposes and doc of web3 calls.
 async function getKeeperAddrs() {
-    let prom;   // will wait for the promise to finish
-    await web3.eth.getPastLogs(optionsArdd, async (error, results) => {
-        prom = await updKeepersAddrsCallback(error, results);
+    web3.eth.getPastLogs(originsAllowedOptions, async (error, results) => {
+        // console.log(results)
+        await originsEventCallback(error, results);
         // update the keepers map on subs event
-        await keepersDataFunc.updateKeepersAddressMap();
+        await keepersDataModule.updateKeepersAddressMap();
         // print the newly upd addrs map
-        keepersDataFunc.displayKeepersAddressMap();
+        keepersDataModule.displayKeepersAddressMap();
     });
-    return prom;
 }
 
 // method to subscribe to RFQ_ORDER_ORIGINS_ALLOWED_EV events
-function getKeeperAddrsSubs() {
+function originsAllowedSubscription() {
     web3.eth.subscribe('logs', {
         address: PROXY_0X_CONTRACT_ADDR,
         topics: [RFQ_ORDER_ORIGINS_ALLOWED_EV]
@@ -126,16 +125,16 @@ function getKeeperAddrsSubs() {
         // log res for debugging purposes
         // console.log(results);  
         // display the new/old keeper address(es)
-        await updKeepersAddrsCallback(null, results); // set error param to null to use the callback function
+        await originsEventCallback(null, results); // set error param to null to use the callback function
         // update the keepers map on subs event
-        await keepersDataFunc.updateKeepersAddressMap();
+        await keepersDataModule.updateKeepersAddressMap();
         // print the newly upd addrs map
-        keepersDataFunc.displayKeepersAddressMap();
+        keepersDataModule.displayKeepersAddressMap();
     });
 }
 
 // method to service RFQ_ORDER_FILLED_EV events
-async function trackOrderFilledCallback(error, results) {  
+async function orderFilledEventCallback(error, results) {  
     if (!error) {        
         let fields = [];
         if (!results.length)
@@ -145,20 +144,20 @@ async function trackOrderFilledCallback(error, results) {
             const dataRes = web3.eth.abi.decodeParameters(['bytes32', 'address', 'address', 
                 'address', 'address', 'uint128', 'uint128', 'bytes32'], results[i].data);
             // check if the taker address is enlisted into the Keeper Takers ones
-            keeperTakerAddr = [].concat(...Array.from(keepersDataFunc.getActiveKeepers().values()));
+            keeperTakerAddr = [].concat(...Array.from(keepersDataModule.getActiveKeepers().values()));
             if (keeperTakerAddr.includes(dataRes[2].toLowerCase())) {
                 // block nr
                 console.log(`Block nr: ${results[i].blockNumber}`);
                 // get token market info
-                makerTokenData = tokenMetadataFunc.getTokenDataByAddress(dataRes[3].toLowerCase());
-                takerTokenData = tokenMetadataFunc.getTokenDataByAddress(dataRes[4].toLowerCase());
+                makerTokenData = tokenDataModule.getTokenDataByAddress(dataRes[3].toLowerCase());
+                takerTokenData = tokenDataModule.getTokenDataByAddress(dataRes[4].toLowerCase());
 
                 if (makerTokenData && takerTokenData) {
                     // compute amounts exchanged
                     let makerAmount = +(Math.round(dataRes[6]/(10**makerTokenData["decimals"]) + "e+2")  + "e-2");
                     let takerAmount = +(Math.round(dataRes[5]/(10**takerTokenData["decimals"]) + "e+2")  + "e-2");
                     // get Tx keeper name
-                    let keeperName = [...keepersDataFunc.getActiveKeepers()].find(([key, value]) => value.includes(dataRes[2].toLowerCase()))[0]
+                    let keeperName = [...keepersDataModule.getActiveKeepers()].find(([key, value]) => value.includes(dataRes[2].toLowerCase()))[0]
                     // format the webhook message content
                     fieldName = `New OrderFill:\n\n`;
                     fieldValue = `${makerAmount} ${makerTokenData["name"]} to ${takerAmount} ${takerTokenData["name"]} (~$${Math.round(takerAmount*takerTokenData["latest_price"]["usd_price"])})\n\n`;
@@ -170,21 +169,19 @@ async function trackOrderFilledCallback(error, results) {
             }
         }
 
-        await discordDisplay.postDiscordMessage(fields);
+        await discordModule.postDiscordMessage(fields);
     }
 }
 
-// old (deprecated) method to get past orders filled by Keeper. Used mainly for testing purposes.
-async function filterOrderFilledLogs() {
-    let prom;   // will wait for the promise to finish
-    await web3.eth.getPastLogs(optionsOrders, (error, results) => {
-        prom = trackOrderFilledCallback(error, results);
+// old (deprecated) method to get past orders filled by Keeper. Used mainly for testing purposes and doc of web3 calls.
+function filterOrderFilledLogs() {
+    web3.eth.getPastLogs(orderFilledOptions, (error, results) => {
+        orderFilledEventCallback(error, results);
     });
-    return prom;
 }
 
 // method to subscribe to RFQ_ORDER_FILLED_EV events
-function filterOrderFilledLogsSubs() {
+function orderFilledEventSubscription() {
     web3.eth.subscribe('logs', {
         address: PROXY_0X_CONTRACT_ADDR,
         topics: [RFQ_ORDER_FILLED_EV]
@@ -192,12 +189,12 @@ function filterOrderFilledLogsSubs() {
     .on("data", (results) => {
         // log res for debugging purposes
         // console.log(results);                       
-        trackOrderFilledCallback(null, results);    // set error param to null to use the callback function
+        orderFilledEventCallback(null, results);    // set error param to null to use the callback function
     });
 }
 
 // main method to subscribe to the req events and periodically upd token and keepers data
-async function trackFilledOrdersByKeepers() {
+async function trackOriginsAndOrderFilledEvents() {
     // make sure we are synced to the eth ntw
     web3.eth.isSyncing()
         .then(async (result) => {
@@ -205,23 +202,21 @@ async function trackFilledOrdersByKeepers() {
             {
                 console.log('Successfully synced!');
 
-                // keepersDataFunc.updateKeepersAddressMap();
-
-                // periodically update the keepers addrs. this periodic call should be redundant (safety measure), since 
-                // the keeper addrs should be updated automatically in case of RFQ_ORDER_ORIGINS_ALLOWED_EV events
-                // through the subscription callback mechanism
-                await keepersDataFunc.periodicKeepersAddressUpdate();
                 // if server just started, display in Discord all active Keepers
-                keepersDataFunc.displayKeepersAddressMap();
-                // periodically update the token data
-                await tokenMetadataFunc.periodicTokenDataUpdate();
-                // await getKeeperAddrs();
-
+                await keepersDataModule.updateKeepersAddressMap();
+                keepersDataModule.displayKeepersAddressMap();
+                // ... and some orderFilled past logs
+                await tokenDataModule.updateTokenData();
                 filterOrderFilledLogs();
 
+                tokenDataModule.periodicTokenDataUpdate();
+                // redundant periodic call (safety measure), keeper addrs are updated automatically in case of events
+                // through the subscription callback mechanism
+                keepersDataModule.periodicKeepersAddressUpdate();
+
                 // perform event subscriptions
-                // getKeeperAddrsSubs();               // log to Discord new Keeper Addresses
-                // filterOrderFilledLogsSubs();        // log to Discord Keepers' Transactions
+                originsAllowedSubscription();
+                orderFilledEventSubscription();
             }
             else {
                 console.log("Error at syncing! Restart server...");
@@ -229,4 +224,4 @@ async function trackFilledOrdersByKeepers() {
         })
 }
 
-module.exports = { trackFilledOrdersByKeepers };
+module.exports = { trackOriginsAndOrderFilledEvents };
