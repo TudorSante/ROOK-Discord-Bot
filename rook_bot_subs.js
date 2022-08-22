@@ -29,7 +29,7 @@ let orderFilledOptions = {
 };
 
 // method to service RFQ_ORDER_ORIGINS_ALLOWED_EV events
-async function originsEventCallback(error, results) {
+async function originsAllowedEventCallback(error, results) {
     if (!error) {
         if (!Array.isArray(results))
             results = [results]; // if not an array of res was returned, rather only an element
@@ -107,7 +107,7 @@ async function originsEventCallback(error, results) {
 async function getKeeperAddrs() {
     web3.eth.getPastLogs(originsAllowedOptions, async (error, results) => {
         // console.log(results)
-        await originsEventCallback(error, results);
+        await originsAllowedEventCallback(error, results);
         // update the keepers map on subs event
         await keepersDataModule.updateKeepersAddressMap();
         // print the newly upd addrs map
@@ -116,7 +116,7 @@ async function getKeeperAddrs() {
 }
 
 // method to subscribe to RFQ_ORDER_ORIGINS_ALLOWED_EV events
-function originsAllowedSubscription() {
+function originsAllowedEventSubscription() {
     web3.eth.subscribe('logs', {
         address: PROXY_0X_CONTRACT_ADDR,
         topics: [RFQ_ORDER_ORIGINS_ALLOWED_EV]
@@ -125,7 +125,7 @@ function originsAllowedSubscription() {
         // log res for debugging purposes
         // console.log(results);  
         // display the new/old keeper address(es)
-        await originsEventCallback(null, results); // set error param to null to use the callback function
+        await originsAllowedEventCallback(null, results); // set error param to null to use the callback function
         // update the keepers map on subs event
         await keepersDataModule.updateKeepersAddressMap();
         // print the newly upd addrs map
@@ -215,7 +215,7 @@ async function trackOriginsAndOrderFilledEvents() {
                 keepersDataModule.periodicKeepersAddressUpdate();
 
                 // perform event subscriptions
-                originsAllowedSubscription();
+                originsAllowedEventSubscription();
                 orderFilledEventSubscription();
             }
             else {
